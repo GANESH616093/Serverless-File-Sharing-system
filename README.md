@@ -60,7 +60,7 @@ frontend/
 README.md                   This file
 ```
 
-## Deploying it (get your real hosted link)
+
 
 You'll need an AWS account and the AWS SAM CLI installed
 (`brew install aws-sam-cli` or see AWS's install docs).
@@ -93,7 +93,7 @@ aws s3 cp frontend/index.html s3://<website-bucket-name>/index.html
 
 Open the `WebsiteUrl` from the outputs — that's your presentable, hosted link.
 
-### Locking it down further (recommended before sharing widely)
+### Locking it down further 
 - Redeploy with `AllowedOrigin` set to your actual `WebsiteUrl` instead of `*`.
 - Put the website bucket behind **CloudFront + Origin Access Control** instead
   of public S3 website hosting, and get free HTTPS + a CDN in the process.
