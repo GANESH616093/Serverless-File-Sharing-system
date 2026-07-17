@@ -110,9 +110,4 @@ Lambda invocations, API Gateway requests. For light/demo usage this
 comfortably sits in AWS's free tier; there's no idle server cost since
 nothing runs when no one's using it.
 
-## Local preview without AWS
 
-Since the frontend is a static file with no build step, you can just open
-`frontend/index.html` directly in a browser — it runs in **demo mode**
-(an in-memory mock backend) whenever `API_BASE_URL` is left blank, so you can
-see the full upload/expire/download/delete flow before deploying anything.
