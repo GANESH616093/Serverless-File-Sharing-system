@@ -1,0 +1,200 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Serverless File Sharing System — presigned-URL uploads/downloads,
+  DynamoDB metadata + expiry, static website frontend.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: file-share
+    Description: Prefix used for resource names (must be globally-unique for S3 buckets, so it gets a suffix)
+  LinkExpiryMinutes:
+    Type: Number
+    Default: 15
+    Description: How long a generated upload/download URL stays valid
+  FileRetentionDays:
+    Type: Number
+    Default: 7
+    Description: How long an uploaded file is kept before S3 auto-deletes it
+  AllowedOrigin:
+    Type: String
+    Default: "*"
+    Description: CORS origin allowed to call the API (lock this down to your site's URL after first deploy)
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 10
+    MemorySize: 256
+    Environment:
+      Variables:
+        FILES_BUCKET: !Ref FilesBucket
+        FILES_TABLE: !Ref FilesTable
+        LINK_EXPIRY_MINUTES: !Ref LinkExpiryMinutes
+        ALLOWED_ORIGIN: !Ref AllowedOrigin
+
+Resources:
+
+  # ---------- Storage: uploaded files ----------
+  FilesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${ProjectName}-files-${AWS::AccountId}-${AWS::Region}"
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ["*"]
+            AllowedMethods: [GET, PUT, POST, HEAD]
+            AllowedOrigins: [!Ref AllowedOrigin]
+            MaxAge: 3000
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireUploadedFiles
+            Status: Enabled
+            ExpirationInDays: !Ref FileRetentionDays
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  # ---------- Storage: file metadata ----------
+  FilesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectName}-files"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: fileId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: fileId
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # ---------- API ----------
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins: [!Ref AllowedOrigin]
+        AllowMethods: [GET, POST, DELETE, OPTIONS]
+        AllowHeaders: ["Content-Type"]
+
+  # ---------- Lambda: request an upload URL ----------
+  GenerateUploadUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: generate_upload_url.handler
+      CodeUri: src/lambda/
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref FilesBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref FilesTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /files/upload-url
+            Method: POST
+
+  # ---------- Lambda: request a download URL ----------
+  GenerateDownloadUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: generate_download_url.handler
+      CodeUri: src/lambda/
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref FilesBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref FilesTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /files/{fileId}/download-url
+            Method: GET
+
+  # ---------- Lambda: list active files ----------
+  ListFilesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: list_files.handler
+      CodeUri: src/lambda/
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref FilesTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /files
+            Method: GET
+
+  # ---------- Lambda: delete a file ----------
+  DeleteFileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: delete_file.handler
+      CodeUri: src/lambda/
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref FilesBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref FilesTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /files/{fileId}
+            Method: DELETE
+
+  # ---------- Frontend static website hosting ----------
+  WebsiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${ProjectName}-site-${AWS::AccountId}-${AWS::Region}"
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  WebsiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebsiteBucket
+      PolicyDocument:
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub "${WebsiteBucket.Arn}/*"
+
+Outputs:
+  ApiUrl:
+    Description: Base URL of the file-sharing API
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+  WebsiteUrl:
+    Description: Public URL of the hosted frontend (this is your "presentable link")
+    Value: !GetAtt WebsiteBucket.WebsiteURL
+  FilesBucketName:
+    Value: !Ref FilesBucket
+  FilesTableName:
+    Value: !Ref FilesTable

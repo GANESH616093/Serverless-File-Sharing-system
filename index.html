@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Depot — send files, on the clock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0E1420;
+    --panel:#151C2C;
+    --panel-raised:#1B2436;
+    --hairline:#2A3448;
+    --text:#E8EAF0;
+    --text-muted:#8A93A8;
+    --amber:#F2A93B;
+    --amber-dim:#5B4522;
+    --teal:#4FD1C5;
+    --red:#E8615A;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--ink);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:820px;margin:0 auto;padding:56px 24px 100px;}
+
+  /* ---------- Header ---------- */
+  header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:48px;}
+  .logo{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;letter-spacing:-0.02em;}
+  .logo span{color:var(--amber);}
+  .mode-badge{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;
+    color:var(--text-muted);border:1px solid var(--hairline);border-radius:20px;
+    padding:5px 12px;text-transform:uppercase;
+  }
+
+  /* ---------- Hero / drop zone ---------- */
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.1em;
+    color:var(--amber);text-transform:uppercase;margin:0 0 10px;
+  }
+  h1{
+    font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:34px;
+    line-height:1.15;letter-spacing:-0.01em;margin:0 0 12px;
+  }
+  .sub{color:var(--text-muted);font-size:15px;line-height:1.6;margin:0 0 32px;max-width:520px;}
+
+  .dropzone{
+    border:1.5px dashed var(--hairline);border-radius:14px;background:var(--panel);
+    padding:44px 28px;text-align:center;cursor:pointer;transition:border-color .18s, background .18s;
+    position:relative;
+  }
+  .dropzone:hover, .dropzone.drag{border-color:var(--amber);background:var(--panel-raised);}
+  .dropzone input{display:none;}
+  .chute-icon{width:40px;height:40px;margin:0 auto 16px;display:block;}
+  .drop-label{font-size:15px;font-weight:500;margin-bottom:4px;}
+  .drop-hint{font-size:13px;color:var(--text-muted);font-family:'IBM Plex Mono',monospace;}
+
+  /* ---------- Upload progress row ---------- */
+  .pending{
+    margin-top:16px;background:var(--panel);border:1px solid var(--hairline);
+    border-radius:10px;padding:16px 18px;display:none;
+  }
+  .pending.show{display:block;}
+  .pending-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:8px;}
+  .pending-name{font-family:'IBM Plex Mono',monospace;color:var(--text);}
+  .pending-pct{font-family:'IBM Plex Mono',monospace;color:var(--amber);}
+  .bar-track{height:5px;border-radius:3px;background:var(--hairline);overflow:hidden;}
+  .bar-fill{height:100%;background:var(--amber);width:0%;transition:width .15s linear;}
+
+  /* ---------- Manifest ---------- */
+  .manifest{margin-top:56px;}
+  .manifest-head{
+    display:flex;justify-content:space-between;align-items:baseline;
+    border-bottom:1px solid var(--hairline);padding-bottom:12px;margin-bottom:4px;
+  }
+  .manifest-title{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:15px;}
+  .manifest-count{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-muted);}
+
+  .row{
+    display:grid;grid-template-columns:1fr auto auto auto;gap:18px;align-items:center;
+    padding:18px 0;border-bottom:1px solid var(--hairline);
+  }
+  .row:last-child{border-bottom:none;}
+  .file-name{font-weight:500;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .file-meta{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-muted);margin-top:3px;}
+
+  .clock{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;text-align:right;min-width:64px;
+  }
+  .clock.warn{color:var(--amber);}
+  .clock.critical{color:var(--red);}
+
+  .icon-btn{
+    background:none;border:1px solid var(--hairline);color:var(--text-muted);
+    border-radius:8px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;transition:border-color .15s, color .15s;
+  }
+  .icon-btn:hover{border-color:var(--amber);color:var(--amber);}
+  .icon-btn.danger:hover{border-color:var(--red);color:var(--red);}
+  .btn-group{display:flex;gap:8px;}
+
+  .empty{
+    padding:40px 0;text-align:center;color:var(--text-muted);font-size:13.5px;
+  }
+
+  .toast{
+    position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--panel-raised);border:1px solid var(--hairline);border-radius:10px;
+    padding:12px 20px;font-size:13px;opacity:0;transition:opacity .2s, transform .2s;pointer-events:none;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  footer{margin-top:64px;font-size:12px;color:var(--text-muted);font-family:'IBM Plex Mono',monospace;}
+  footer a{color:var(--teal);text-decoration:none;}
+
+  @media (max-width:560px){
+    .row{grid-template-columns:1fr auto;}
+    .clock{grid-column:1;text-align:left;}
+    .btn-group{grid-column:2;grid-row:1 / span 2;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">de<span>p</span>ot</div>
+    <div class="mode-badge" id="modeBadge">checking backend…</div>
+  </header>
+
+  <p class="eyebrow">Serverless transfer</p>
+  <h1>Send a file. The link expires<br>whether or not it's used.</h1>
+  <p class="sub">Files upload straight to S3 through a short-lived presigned URL — nothing passes through a server you pay to keep running. Every link in the manifest below is on its own countdown.</p>
+
+  <div class="dropzone" id="dropzone">
+    <input type="file" id="fileInput">
+    <svg class="chute-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M20 4V26M20 26L12 18M20 26L28 18" stroke="#F2A93B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M6 30V33C6 34.6569 7.34315 36 9 36H31C32.6569 36 34 34.6569 34 33V30" stroke="#8A93A8" stroke-width="2.2" stroke-linecap="round"/>
+    </svg>
+    <div class="drop-label">Drop a file here, or click to choose one</div>
+    <div class="drop-hint">up to 5 GB · link auto-expires in <span id="expiryMinsLabel">15</span> min</div>
+  </div>
+
+  <div class="pending" id="pendingRow">
+    <div class="pending-row">
+      <span class="pending-name" id="pendingName">—</span>
+      <span class="pending-pct" id="pendingPct">0%</span>
+    </div>
+    <div class="bar-track"><div class="bar-fill" id="pendingBar"></div></div>
+  </div>
+
+  <div class="manifest">
+    <div class="manifest-head">
+      <div class="manifest-title">Active transfers</div>
+      <div class="manifest-count" id="fileCount">0 files</div>
+    </div>
+    <div id="fileList"></div>
+  </div>
+
+  <footer>
+    API: <span id="apiTarget">not configured</span> — see README to point this at your deployed stack.
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   CONFIG
+   Set this to your deployed API's base URL (the "ApiUrl" stack
+   output) once you've run `sam deploy`. Until then, the page
+   runs in demo mode against an in-memory mock backend so you
+   can see the full flow.
+   ============================================================ */
+const API_BASE_URL = ""; // e.g. "https://abc123.execute-api.us-east-1.amazonaws.com"
+const LINK_EXPIRY_MINUTES = 15;
+
+document.getElementById('expiryMinsLabel').textContent = LINK_EXPIRY_MINUTES;
+document.getElementById('apiTarget').textContent = API_BASE_URL || "demo mode (no backend connected)";
+
+const DEMO_MODE = !API_BASE_URL;
+document.getElementById('modeBadge').textContent = DEMO_MODE ? "● demo mode" : "● live";
+document.getElementById('modeBadge').style.color = DEMO_MODE ? "#F2A93B" : "#4FD1C5";
+
+// ---------- tiny in-memory mock backend (demo mode only) ----------
+const mockStore = new Map();
+function mockUploadUrl(filename, size, contentType){
+  const fileId = crypto.randomUUID();
+  mockStore.set(fileId, {
+    fileId, filename, size, contentType,
+    uploadedAt: Math.floor(Date.now()/1000),
+    expiresAt: Math.floor(Date.now()/1000) + LINK_EXPIRY_MINUTES*60,
+    downloadCount: 0
+  });
+  return fileId;
+}
+
+// ---------- API wrapper ----------
+async function apiRequest(path, options={}){
+  if (DEMO_MODE) throw new Error("demo-mode-no-network");
+  const res = await fetch(API_BASE_URL + path, {
+    headers: {'Content-Type': 'application/json'},
+    ...options
+  });
+  if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+  return res.json();
+}
+
+async function listFiles(){
+  if (DEMO_MODE) return {files: Array.from(mockStore.values())};
+  return apiRequest('/files');
+}
+
+async function requestUploadUrl(filename, contentType, size){
+  if (DEMO_MODE){
+    const fileId = mockUploadUrl(filename, size, contentType);
+    return {fileId, uploadUrl: null, expiresInSeconds: LINK_EXPIRY_MINUTES*60};
+  }
+  return apiRequest('/files/upload-url', {
+    method:'POST',
+    body: JSON.stringify({filename, contentType, size})
+  });
+}
+
+async function requestDownloadUrl(fileId){
+  if (DEMO_MODE){
+    const item = mockStore.get(fileId);
+    item.downloadCount++;
+    return {downloadUrl: '#', filename: item.filename};
+  }
+  return apiRequest(`/files/${fileId}/download-url`);
+}
+
+async function deleteFile(fileId){
+  if (DEMO_MODE){ mockStore.delete(fileId); return; }
+  return apiRequest(`/files/${fileId}`, {method:'DELETE'});
+}
+
+// ---------- upload flow ----------
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const pendingRow = document.getElementById('pendingRow');
+const pendingName = document.getElementById('pendingName');
+const pendingPct = document.getElementById('pendingPct');
+const pendingBar = document.getElementById('pendingBar');
+
+dropzone.addEventListener('click', () => fileInput.click());
+['dragenter','dragover'].forEach(evt => dropzone.addEventListener(evt, e => {
+  e.preventDefault(); dropzone.classList.add('drag');
+}));
+['dragleave','drop'].forEach(evt => dropzone.addEventListener(evt, e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+}));
+dropzone.addEventListener('drop', e => {
+  if (e.dataTransfer.files.length) handleUpload(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files.length) handleUpload(e.target.files[0]);
+  fileInput.value = '';
+});
+
+async function handleUpload(file){
+  pendingRow.classList.add('show');
+  pendingName.textContent = file.name;
+  pendingPct.textContent = '0%';
+  pendingBar.style.width = '0%';
+
+  try{
+    const {fileId, uploadUrl} = await requestUploadUrl(file.name, file.type || 'application/octet-stream', file.size);
+
+    if (DEMO_MODE){
+      await simulateProgress();
+    } else {
+      await putWithProgress(uploadUrl, file, pct => {
+        pendingPct.textContent = pct + '%';
+        pendingBar.style.width = pct + '%';
+      });
+    }
+
+    showToast(`${file.name} uploaded — link is live for ${LINK_EXPIRY_MINUTES} min`);
+  } catch(err){
+    showToast('Upload failed: ' + err.message);
+  } finally {
+    setTimeout(() => pendingRow.classList.remove('show'), 600);
+    refreshList();
+  }
+}
+
+function simulateProgress(){
+  return new Promise(resolve => {
+    let pct = 0;
+    const t = setInterval(() => {
+      pct += Math.random()*22;
+      if (pct >= 100){ pct = 100; clearInterval(t); resolve(); }
+      pendingPct.textContent = Math.floor(pct) + '%';
+      pendingBar.style.width = pct + '%';
+    }, 140);
+  });
+}
+
+function putWithProgress(url, file, onProgress){
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable) onProgress(Math.floor((e.loaded/e.total)*100));
+    };
+    xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error('S3 rejected the upload')));
+    xhr.onerror = () => reject(new Error('network error during upload'));
+    xhr.send(file);
+  });
+}
+
+// ---------- manifest rendering ----------
+const fileList = document.getElementById('fileList');
+const fileCount = document.getElementById('fileCount');
+
+function formatSize(bytes){
+  if (bytes < 1024) return bytes + ' B';
+  const units = ['KB','MB','GB'];
+  let i = -1;
+  do { bytes /= 1024; i++; } while (bytes >= 1024 && i < units.length-1);
+  return bytes.toFixed(1) + ' ' + units[i];
+}
+
+function formatClock(seconds){
+  if (seconds <= 0) return 'expired';
+  const m = Math.floor(seconds/60), s = seconds%60;
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+async function refreshList(){
+  let files = [];
+  try{
+    const data = await listFiles();
+    files = data.files || [];
+  } catch(err){ /* leave list as-is on failure */ }
+
+  fileCount.textContent = `${files.length} file${files.length===1?'':'s'}`;
+
+  if (!files.length){
+    fileList.innerHTML = '<div class="empty">Nothing in transit. Drop a file above to send one.</div>';
+    return;
+  }
+
+  fileList.innerHTML = files.map(f => {
+    const remaining = f.expiresAt - Math.floor(Date.now()/1000);
+    const clockClass = remaining <= 0 ? 'clock critical' : remaining < 120 ? 'clock critical' : remaining < 300 ? 'clock warn' : 'clock';
+    return `
+      <div class="row" data-id="${f.fileId}" data-expires="${f.expiresAt}">
+        <div>
+          <div class="file-name">${escapeHtml(f.filename)}</div>
+          <div class="file-meta">${formatSize(f.size)} · ${f.downloadCount||0} download${f.downloadCount===1?'':'s'}</div>
+        </div>
+        <div class="${clockClass}" data-role="clock">${formatClock(remaining)}</div>
+        <div class="btn-group">
+          <button class="icon-btn" title="Copy download link" onclick="handleDownload('${f.fileId}')">↓</button>
+          <button class="icon-btn danger" title="Delete" onclick="handleDelete('${f.fileId}')">✕</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function handleDownload(fileId){
+  try{
+    const {downloadUrl, filename} = await requestDownloadUrl(fileId);
+    if (DEMO_MODE){
+      showToast(`Demo mode: would download "${filename}" now`);
+    } else {
+      window.open(downloadUrl, '_blank');
+    }
+    refreshList();
+  } catch(err){
+    showToast('Could not generate link: ' + err.message);
+  }
+}
+
+async function handleDelete(fileId){
+  try{
+    await deleteFile(fileId);
+    showToast('File deleted');
+    refreshList();
+  } catch(err){
+    showToast('Could not delete: ' + err.message);
+  }
+}
+
+function escapeHtml(str){
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+// tick all visible clocks every second without a full re-fetch
+setInterval(() => {
+  document.querySelectorAll('.row').forEach(row => {
+    const expiresAt = parseInt(row.dataset.expires, 10);
+    const remaining = expiresAt - Math.floor(Date.now()/1000);
+    const clockEl = row.querySelector('[data-role="clock"]');
+    clockEl.textContent = formatClock(remaining);
+    clockEl.className = 'clock' + (remaining < 120 ? ' critical' : remaining < 300 ? ' warn' : '');
+  });
+}, 1000);
+
+// ---------- toast ----------
+let toastTimer;
+function showToast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+// ---------- init ----------
+refreshList();
+setInterval(refreshList, 20000);
+</script>
+</body>
+</html>
